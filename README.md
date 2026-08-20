@@ -102,6 +102,13 @@ It is deliberately not pre-formatted as a ready-to-paste issue.
 omarchy plugin add https://github.com/angus-mcritchie/omarchy-fault.git --enable
 ```
 
+Remove it again with:
+
+```bash
+omarchy plugin disable angus.fault     # keep it installed, stop loading it
+omarchy plugin remove  angus.fault     # delete it
+```
+
 ## Settings
 
 | Key | Default | Notes |
