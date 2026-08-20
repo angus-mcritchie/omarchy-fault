@@ -126,12 +126,18 @@ Panel {
   readonly property var service: bar && bar.shell ? bar.shell.serviceFor("angus.fault") : null
   readonly property var fault: service ? service.model : null
 
-  onServiceChanged: if (service) service.applySettings({
-    intervalSec: root.setting("intervalSec", 10),
-    journalLines: root.setting("journalLines", 20),
-    watchSystem: root.setting("watchSystem", true),
-    watchUser: root.setting("watchUser", true)
-  })
+  function pushSettings() {
+    if (!service) return
+    service.applySettings({
+      intervalSec: root.setting("intervalSec", 10),
+      journalLines: root.setting("journalLines", 20),
+      watchSystem: root.setting("watchSystem", true),
+      watchUser: root.setting("watchUser", true)
+    })
+  }
+
+  onServiceChanged: pushSettings()
+  onSettingsChanged: pushSettings()
 
   Timer {
     interval: 15000

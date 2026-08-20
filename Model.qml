@@ -12,7 +12,6 @@ import Quickshell.Io
 QtObject {
   id: root
 
-  property var settings: ({})
   property bool watchSystem: true
   property bool watchUser: true
   property int intervalSec: 10

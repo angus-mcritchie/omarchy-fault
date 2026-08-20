@@ -22,7 +22,10 @@ Item {
     if (s.watchUser !== undefined && s.watchUser !== null) model.watchUser = s.watchUser
   }
 
-  readonly property var model: model
+  // The id is deliberately not "model": naming a child the same as the property
+  // that exposes it resolves by luck rather than by rule, and the same
+  // shadowing already caused a binding loop in the widget's Repeater.
+  readonly property var model: poller
 
-  Model { id: model }
+  Model { id: poller }
 }
