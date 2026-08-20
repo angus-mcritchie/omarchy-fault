@@ -26,7 +26,7 @@ Panel {
   property double nowMs: Date.now()
   property string previewKey: ""
 
-  readonly property bool alerting: model.alerting
+  readonly property bool alerting: !!fault && fault.alerting
 
   // Bar.qml collapses a slot whose item is invisible, so a healthy machine
   // draws nothing at all rather than a widget reading zero.
@@ -38,7 +38,7 @@ Panel {
     if (opened) {
       nowMs = Date.now()
       previewKey = ""
-      model.loadDetails()
+      if (fault) fault.loadDetails()
       Qt.callLater(function() { keyCatcher.forceActiveFocus() })
     } else if (!alerting) {
       forceShown = false
@@ -51,8 +51,9 @@ Panel {
   }
 
   function refreshNow() {
-    model.refresh()
-    if (opened) model.loadDetails()
+    if (!fault) return
+    fault.refresh()
+    if (opened) fault.loadDetails()
   }
 
   function ago(stamp) {
@@ -65,31 +66,34 @@ Panel {
   }
 
   function headline() {
+    if (!fault) return "Starting"
     var bits = []
-    if (model.failedCount > 0) bits.push(model.failedCount + (model.failedCount === 1 ? " unit failed" : " units failed"))
-    if (model.restartingCount > 0) bits.push(model.restartingCount + " restarting")
+    if (fault.failedCount > 0) bits.push(fault.failedCount + (fault.failedCount === 1 ? " unit failed" : " units failed"))
+    if (fault.restartingCount > 0) bits.push(fault.restartingCount + " restarting")
     if (bits.length > 0) return bits.join(", ")
-    if (model.anyUnknown) return "A manager could not be read"
-    if (model.anyDegraded) return "Degraded"
+    if (fault.anyUnknown) return "A manager could not be read"
+    if (fault.anyDegraded) return "Degraded"
     return "All units healthy"
   }
 
   function subhead() {
+    if (!fault) return ""
     var parts = []
-    if (model.watchSystem) parts.push("system: " + model.stateLabel(model.systemState))
-    if (model.watchUser) parts.push("user: " + model.stateLabel(model.userState))
+    if (fault.watchSystem) parts.push("system: " + fault.stateLabel(fault.systemState))
+    if (fault.watchUser) parts.push("user: " + fault.stateLabel(fault.userState))
     return parts.join("   ")
   }
 
   function diagnosticsFor(u) {
-    var d = model.details[model.unitKey(u)]
+    if (!fault) return ""
+    var d = fault.details[fault.unitKey(u)]
     var out = []
     out.push("unit:     " + u.unit)
     out.push("manager:  " + u.manager)
     if (u.description) out.push("descr:    " + u.description)
     out.push("state:    " + u.active + " (" + u.sub + ")")
     if (d) {
-      var r = model.reported(d)
+      var r = fault.reported(d)
       if (r) out.push("reported: " + r)
       if (d.restarts) out.push("restarts: " + d.restarts)
       if (d.since) out.push("since:    " + ago(d.since))
@@ -117,14 +121,17 @@ Panel {
     root.close()
   }
 
-  Model {
-    id: model
-    settings: root.settings
-    intervalSec: root.setting("intervalSec", 10)
-    journalLines: root.setting("journalLines", 20)
-    watchSystem: root.setting("watchSystem", true)
+  // One shared poller, instantiated once by the shell. The bar builds a widget
+  // per screen; without this each screen polled systemd independently.
+  readonly property var service: bar && bar.shell ? bar.shell.serviceFor("angus.fault") : null
+  readonly property var fault: service ? service.model : null
+
+  onServiceChanged: if (service) service.applySettings({
+    intervalSec: root.setting("intervalSec", 10),
+    journalLines: root.setting("journalLines", 20),
+    watchSystem: root.setting("watchSystem", true),
     watchUser: root.setting("watchUser", true)
-  }
+  })
 
   Timer {
     interval: 15000
@@ -139,18 +146,20 @@ Panel {
     running: false
   }
 
+  // Deliberately no open/close/toggle here. A per-target IPC handler only ever
+  // reaches whichever per-monitor instance claimed the target, so on a
+  // multi-monitor machine it opened the panel on the wrong screen. The shell's
+  // own router picks the focused output:
+  //
+  //   omarchy-shell shell toggle angus.fault
+  //
   IpcHandler {
     target: root.ipcTarget
-    function open(): void { root.summon() }
-    function close(): void { root.close() }
-    function show(): void { root.summon() }
-    function hide(): void { root.close() }
-    function toggle(): void { root.opened ? root.close() : root.summon() }
-    function summon(): void { root.summon() }
     function refresh(): string { root.refreshNow(); return "ok" }
     function status(): string {
-      return model.failedCount + " failed, " + model.restartingCount + " restarting; " +
-             "system=" + model.systemState + " user=" + model.userState
+      if (!fault) return "starting"
+      return fault.failedCount + " failed, " + fault.restartingCount + " restarting; " +
+             "system=" + fault.systemState + " user=" + fault.userState
     }
   }
 
@@ -159,15 +168,15 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: "󰀦"
-    active: model.urgent
-    opacity: model.urgent ? 1.0 : 0.55
+    active: !!fault && fault.urgent
+    opacity: fault.urgent ? 1.0 : 0.55
     onPressed: function(code) {
       if (code === Qt.MiddleButton) root.refreshNow()
       else root.toggle()
     }
 
     SequentialAnimation on opacity {
-      running: model.restartingCount > 0
+      running: !!fault && fault.restartingCount > 0
       loops: Animation.Infinite
       alwaysRunToEnd: true
       NumberAnimation { to: 0.35; duration: 620; easing.type: Easing.InOutQuad }
@@ -220,14 +229,14 @@ Panel {
             fontFamily: root.fontFamily
             title: root.headline()
             meta: root.subhead()
-            detail: model.detailsLoading ? "reading units..." : ""
+            detail: fault && fault.detailsLoading ? "reading units..." : ""
           }
 
           // ---------------------------------------------------- all clear
           Column {
             width: column.width
             spacing: Style.space(6)
-            visible: model.units.length === 0
+            visible: !fault || fault.units.length === 0
 
             PanelSeparator { width: column.width; foreground: root.foreground }
 
@@ -237,9 +246,9 @@ Panel {
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
               color: root.dim
-              text: model.anyUnknown
+              text: fault.anyUnknown
                 ? "One of the managers did not answer. That is not the same as healthy, which is why this still draws an icon."
-                : model.anyDegraded
+                : fault.anyDegraded
                   ? "A manager reports degraded with no unit currently failed. Something failed earlier and was cleared without being fixed."
                   : "Both managers answered and nothing is failed or restarting."
             }
@@ -250,20 +259,20 @@ Panel {
               font.family: root.monoFamily
               font.pixelSize: Style.font.caption
               color: root.dimmer
-              text: "watching " + ((model.watchSystem ? 1 : 0) + (model.watchUser ? 1 : 0)) +
-                    " manager(s) every " + model.intervalSec + "s"
+              text: "watching " + ((fault.watchSystem ? 1 : 0) + (fault.watchUser ? 1 : 0)) +
+                    " manager(s) every " + fault.intervalSec + "s"
             }
           }
 
           // -------------------------------------------------------- units
           Repeater {
-            model: model.units
+            model: fault ? fault.units : []
 
             delegate: Column {
               id: card
               required property var modelData
-              readonly property var detail: model.details ? model.details[model.unitKey(modelData)] : null
-              readonly property bool isPreviewing: root.previewKey === model.unitKey(modelData)
+              readonly property var detail: fault.details ? fault.details[fault.unitKey(modelData)] : null
+              readonly property bool isPreviewing: root.previewKey === fault.unitKey(modelData)
 
               width: column.width
               spacing: Style.space(4)
@@ -323,7 +332,7 @@ Panel {
                 text: {
                   var bits = []
                   if (card.modelData.kind === "restarting") bits.push("restarting")
-                  var r = model.reported(card.detail)
+                  var r = fault.reported(card.detail)
                   if (r) bits.push(r)
                   if (card.detail && card.detail.restarts > 0) bits.push(card.detail.restarts + " restarts")
                   if (card.detail && card.detail.since) bits.push(root.ago(card.detail.since))
@@ -338,7 +347,7 @@ Panel {
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
                 color: root.dimmer
-                text: model.convention(card.detail)
+                text: fault.convention(card.detail)
               }
 
               // The journal is the evidence; the number above is only a label.
@@ -386,7 +395,7 @@ Panel {
                   MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.previewKey = card.isPreviewing ? "" : model.unitKey(card.modelData)
+                    onClicked: root.previewKey = card.isPreviewing ? "" : fault.unitKey(card.modelData)
                   }
                 }
 

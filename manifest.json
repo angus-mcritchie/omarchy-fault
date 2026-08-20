@@ -6,16 +6,23 @@
   "author": "Angus McRitchie",
   "license": "MIT",
   "description": "Failed and restarting systemd units in the bar, across both the system and the user manager.",
-  "kinds": ["bar-widget"],
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
   "activation": "on-demand",
   "entryPoints": {
+    "service": "Service.qml",
     "barWidget": "Panel.qml"
   },
   "barWidget": {
     "displayName": "Fault",
     "description": "Draws nothing while both systemd managers are healthy. When a unit fails or starts flapping, an icon appears with the units, what systemd reported, and the journal behind them.",
     "category": "System",
-    "aliases": ["fault", "systemd"],
+    "aliases": [
+      "fault",
+      "systemd"
+    ],
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
@@ -25,13 +32,39 @@
       "watchUser": true
     },
     "schema": [
-      { "key": "intervalSec", "type": "integer", "label": "Poll interval (seconds)", "min": 5, "max": 300, "step": 5, "defaultValue": 10,
-        "description": "Two short systemctl calls per manager per tick. A unit that flaps and recovers entirely between two ticks is missed." },
-      { "key": "journalLines", "type": "integer", "label": "Journal lines per unit", "min": 5, "max": 100, "step": 5, "defaultValue": 20,
-        "description": "Read only while the panel is open." },
-      { "key": "watchSystem", "type": "boolean", "label": "Watch the system manager", "defaultValue": true },
-      { "key": "watchUser", "type": "boolean", "label": "Watch the user manager", "defaultValue": true,
-        "description": "Where timers, agents and anything you wrote yourself actually live. Most tools ignore it." }
+      {
+        "key": "intervalSec",
+        "type": "integer",
+        "label": "Poll interval (seconds)",
+        "min": 5,
+        "max": 300,
+        "step": 5,
+        "defaultValue": 10,
+        "description": "Two short systemctl calls per manager per tick. A unit that flaps and recovers entirely between two ticks is missed."
+      },
+      {
+        "key": "journalLines",
+        "type": "integer",
+        "label": "Journal lines per unit",
+        "min": 5,
+        "max": 100,
+        "step": 5,
+        "defaultValue": 20,
+        "description": "Read only while the panel is open."
+      },
+      {
+        "key": "watchSystem",
+        "type": "boolean",
+        "label": "Watch the system manager",
+        "defaultValue": true
+      },
+      {
+        "key": "watchUser",
+        "type": "boolean",
+        "label": "Watch the user manager",
+        "defaultValue": true,
+        "description": "Where timers, agents and anything you wrote yourself actually live. Most tools ignore it."
+      }
     ]
   }
 }

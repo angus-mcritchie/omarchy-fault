@@ -35,10 +35,21 @@ prevent.
 Because a healthy machine draws nothing, the panel can always be summoned by hand:
 
 ```bash
-omarchy-shell angus.fault summon     # opens the panel even with no icon showing
-omarchy-shell angus.fault status     # one line, for scripts
+omarchy-shell shell toggle angus.fault   # opens on whichever output has focus
+omarchy-shell angus.fault status         # one line, for scripts
 omarchy-shell angus.fault refresh
 ```
+
+Or bind it, in `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + SHIFT + U", "Fault (failed units)", "omarchy-shell shell toggle angus.fault")
+```
+
+Note the shell's own router rather than a plugin-specific IPC target. The bar
+builds one widget per screen and a per-target handler only ever reaches
+whichever instance claimed the target, so on a multi-monitor machine it opens
+the panel on the wrong output. `shell toggle` picks the focused one.
 
 ## What it shows
 
@@ -58,6 +69,17 @@ exited, and the low signal numbers collide with named exit statuses. Reading one
 other would report a core dump as "NOTCONFIGURED". Where a number has a conventional
 meaning but no systemd meaning, it is labelled as a convention, because any process may
 exit 127 deliberately.
+
+## One poller, not one per screen
+
+The bar builds a widget instance per monitor. Left alone, a three-monitor
+machine would run three independent copies of the model and ask systemd the
+same questions three times over, on three unsynchronised timers.
+
+Fault therefore ships as a service plus a bar widget: the service is
+instantiated once by the shell and owns all polling, and every widget reads the
+same state through `bar.shell.serviceFor()`. That is the same split the
+first-party media plugin uses.
 
 ## Read-only, on purpose
 
